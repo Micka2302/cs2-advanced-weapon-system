@@ -10,10 +10,12 @@ public class Config : BasePluginConfig
     {
         public string Weapon { get; set; } = string.Empty;
         public int? Clip { get; set; }
+        public int? Magazines { get; set; }
         public int? Ammo { get; set; }
         public bool? BlockUsing { get; set; }
         public bool? IgnorePickUpFromBlockUsing { get; set; }
         public bool? ReloadAfterShoot { get; set; }
+        public bool? UnlimitedMagazines { get; set; }
         public bool? UnlimitedAmmo { get; set; }
         public bool? UnlimitedClip { get; set; }
         public bool? OnlyHeadshot { get; set; }

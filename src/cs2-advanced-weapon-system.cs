@@ -10,11 +10,19 @@ using static CounterStrikeSharp.API.Core.Listeners;
 
 namespace AdvancedWeaponSystem;
 
+<<<<<<< HEAD
 public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 {
     public override string ModuleName => "Advanced Weapon System";
-    public override string ModuleVersion => "1.10";
+    public override string ModuleVersion => "1.11";
     public override string ModuleAuthor => "schwarper";
+=======
+public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
+{
+    public override string ModuleName => "Advanced Weapon System";
+    public override string ModuleVersion => "v11";
+    public override string ModuleAuthor => "schwarper";
+>>>>>>> 4bd14fa09a2aa86c81d28448407104bc6a25f7f8
 
     public Config Config { get; set; } = new Config();
     public static AdvancedWeaponSystem Instance { get; private set; } = new();
@@ -51,8 +59,8 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
         if (weaponData.UnlimitedClip == true)
             activeWeapon.Clip1 += 1;
 
-        if (weaponData.UnlimitedAmmo == true)
-            activeWeapon.ReserveAmmo[0] += 1;
+        if (HasUnlimitedReserve(weaponData))
+            RefillReserveAmmo(activeWeapon, weaponData);
 
         if (weaponData.ReloadAfterShoot == true)
         {
@@ -85,8 +93,8 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
         if (weaponData.Clip.HasValue)
             weaponVData.MaxClip1 = weaponData.Clip.Value;
 
-        if (weaponData.Ammo.HasValue)
-            weaponVData.PrimaryReserveAmmoMax = weaponData.Ammo.Value;
+        if (ResolveReserveAmmo(weaponData, weaponVData) is int reserveAmmo)
+            weaponVData.PrimaryReserveAmmoMax = reserveAmmo;
     }
 
     public HookResult OnTakeDamage(DynamicHook hook)
@@ -135,6 +143,21 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
         hook.SetReturn(AcquireResult.NotAllowedByProhibition);
         return HookResult.Handled;
     }
+
+    private static void RefillReserveAmmo(CBasePlayerWeapon activeWeapon, WeaponData weaponData)
+    {
+        if (activeWeapon.As<CCSWeaponBase>().VData is not CCSWeaponBaseVData weaponVData)
+            return;
+
+        int reserveTarget = ResolveReserveAmmo(weaponData, weaponVData) ?? weaponVData.PrimaryReserveAmmoMax;
+        if (reserveTarget <= 0)
+            reserveTarget = Math.Max(weaponVData.PrimaryReserveAmmoMax, 1);
+
+        int currentReserve = activeWeapon.ReserveAmmo[0];
+        if (currentReserve < reserveTarget)
+            activeWeapon.ReserveAmmo[0] = reserveTarget;
+    }
 }
+
 
 
