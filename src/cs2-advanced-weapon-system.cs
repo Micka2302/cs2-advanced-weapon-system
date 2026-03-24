@@ -10,11 +10,19 @@ using static CounterStrikeSharp.API.Core.Listeners;
 
 namespace AdvancedWeaponSystem;
 
+<<<<<<< HEAD
 public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 {
     public override string ModuleName => "Advanced Weapon System";
     public override string ModuleVersion => "1.11";
     public override string ModuleAuthor => "schwarper";
+=======
+public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
+{
+    public override string ModuleName => "Advanced Weapon System";
+    public override string ModuleVersion => "v11";
+    public override string ModuleAuthor => "schwarper";
+>>>>>>> 4bd14fa09a2aa86c81d28448407104bc6a25f7f8
 
     public Config Config { get; set; } = new Config();
     public static AdvancedWeaponSystem Instance { get; private set; } = new();
@@ -150,5 +158,6 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
             activeWeapon.ReserveAmmo[0] = reserveTarget;
     }
 }
+
 
 
