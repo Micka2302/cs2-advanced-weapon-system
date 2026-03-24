@@ -20,6 +20,50 @@ public static class Weapon
         return weapon.GetVData<CCSWeaponBaseVData>()?.Name ?? "weapon_unknown";
     }
 
+    public static bool HasUnlimitedReserve(WeaponData weaponData)
+    {
+        return weaponData.UnlimitedMagazines == true || weaponData.UnlimitedAmmo == true;
+    }
+
+    public static int? ResolveReserveAmmo(WeaponData weaponData, CCSWeaponBaseVData weaponVData)
+    {
+        if (weaponData.Magazines is int magazines)
+            return Math.Max(magazines, 0);
+
+        if (weaponData.Ammo is not int ammo)
+            return null;
+
+        if (ShouldConvertLegacyBulletAmmoToMagazines(ammo, weaponVData))
+            return ConvertBulletsToMagazineCount(ammo, weaponVData.MaxClip1);
+
+        return Math.Max(ammo, 0);
+    }
+
+    private static bool ShouldConvertLegacyBulletAmmoToMagazines(int configuredAmmo, CCSWeaponBaseVData weaponVData)
+    {
+        int maxClip = weaponVData.MaxClip1;
+        int defaultReserve = weaponVData.PrimaryReserveAmmoMax;
+
+        if (maxClip <= 0 || defaultReserve <= 0)
+            return false;
+
+        bool gameUsesMagazineReserve = defaultReserve < maxClip;
+        bool configuredAmmoLooksLikeBulletCount = configuredAmmo > maxClip;
+
+        return gameUsesMagazineReserve && configuredAmmoLooksLikeBulletCount;
+    }
+
+    private static int ConvertBulletsToMagazineCount(int configuredAmmo, int maxClip)
+    {
+        if (configuredAmmo <= 0)
+            return 0;
+
+        if (maxClip <= 0)
+            return configuredAmmo;
+
+        return (int)Math.Ceiling((double)configuredAmmo / maxClip);
+    }
+
     public static void SetDamage(CTakeDamageInfo info, WeaponData weaponData)
     {
         if (weaponData.Damage == null)

@@ -1,0 +1,85 @@
+[WeaponDatas] 
+
+[WeaponDatas.weapon_ak47]
+Magazines = 7
+
+[WeaponDatas.weapon_aug]
+Magazines = 7
+
+[WeaponDatas.weapon_bizon]
+Magazines = 8
+
+[WeaponDatas.weapon_cz75a]
+Magazines = 6
+
+[WeaponDatas.weapon_deagle]
+Magazines = 6
+
+[WeaponDatas.weapon_elite]
+Magazines = 6
+
+[WeaponDatas.weapon_famas]
+Magazines = 7
+
+[WeaponDatas.weapon_fiveseven]
+Magazines = 6
+
+[WeaponDatas.weapon_galilar]
+Magazines = 6
+
+[WeaponDatas.weapon_glock]
+Magazines = 6
+
+[WeaponDatas.weapon_hkp2000]
+Magazines = 6
+
+[WeaponDatas.weapon_m4a1]
+Magazines = 7
+
+[WeaponDatas.weapon_m4a1_silencer]
+Magazines = 7
+
+[WeaponDatas.weapon_mac10]
+Magazines = 7
+
+[WeaponDatas.weapon_mp5sd]
+Magazines = 7
+
+[WeaponDatas.weapon_mp7]
+Magazines = 7
+
+[WeaponDatas.weapon_mp9]
+Magazines = 7
+
+[WeaponDatas.weapon_p250]
+Magazines = 7
+
+[WeaponDatas.weapon_p90]
+Magazines = 7
+
+[WeaponDatas.weapon_revolver]
+Magazines = 4
+
+[WeaponDatas.weapon_sg556]
+Magazines = 7
+
+[WeaponDatas.weapon_ssg08]
+Magazines = 5
+
+[WeaponDatas.weapon_tec9]
+Magazines = 7
+
+[WeaponDatas.weapon_ump45]
+Magazines = 7
+
+[WeaponDatas.weapon_usp_silencer]
+Magazines = 7
+
+[WeaponDatas.weapon_smokegrenade]
+BlockUsing = true
+AdminFlagsToIgnoreBlockUsing = ["@abs/membre"]
+
+[WeaponDatas.weapon_awp]
+BlockUsing = true
+AdminFlagsToIgnoreBlockUsing = ["@abs/membre"]
+Magazines = 5
