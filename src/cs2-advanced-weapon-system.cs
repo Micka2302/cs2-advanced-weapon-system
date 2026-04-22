@@ -1,78 +1,84 @@
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Core.Translations;
-using CounterStrikeSharp.API.Modules.Memory;
-using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
 using CounterStrikeSharp.API.Modules.Utils;
+using Microsoft.Extensions.Logging;
 using static AdvancedWeaponSystem.Config;
 using static AdvancedWeaponSystem.Weapon;
 using static CounterStrikeSharp.API.Core.Listeners;
 
 namespace AdvancedWeaponSystem;
 
-<<<<<<< HEAD
 public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 {
     public override string ModuleName => "Advanced Weapon System";
     public override string ModuleVersion => "1.11";
     public override string ModuleAuthor => "schwarper";
-=======
-public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
-{
-    public override string ModuleName => "Advanced Weapon System";
-    public override string ModuleVersion => "v11";
-    public override string ModuleAuthor => "schwarper";
->>>>>>> 4bd14fa09a2aa86c81d28448407104bc6a25f7f8
 
     public Config Config { get; set; } = new Config();
-    public static AdvancedWeaponSystem Instance { get; private set; } = new();
+    private int _restrictionTickCounter;
+    private readonly Dictionary<string, DateTime> _restrictionNoticeCooldown = new();
+    private static readonly TimeSpan RestrictionNoticeInterval = TimeSpan.FromSeconds(2);
 
 
     public override void Load(bool hotReload)
     {
-        Instance = this;
-
-        VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(OnTakeDamage, HookMode.Pre);
-        VirtualFunctions.CCSPlayer_ItemServices_CanAcquireFunc.Hook(OnWeaponCanAcquire, HookMode.Pre);
     }
 
     public override void Unload(bool hotReload)
     {
-        VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Unhook(OnTakeDamage, HookMode.Pre);
-        VirtualFunctions.CCSPlayer_ItemServices_CanAcquireFunc.Unhook(OnWeaponCanAcquire, HookMode.Pre);
+        _restrictionNoticeCooldown.Clear();
     }
 
     public void OnConfigParsed(Config config)
     {
-        Config = config;
+        Config = SanitizeConfig(config);
     }
 
     [GameEventHandler]
     public HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
     {
-        if (@event.Userid is not { } player || player.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value is not { } activeWeapon)
-            return HookResult.Continue;
-
-        if (!Config.WeaponDatas.TryGetValue(GetDesignerName(activeWeapon), out WeaponData? weaponData))
-            return HookResult.Continue;
-
-        if (weaponData.UnlimitedClip == true)
-            activeWeapon.Clip1 += 1;
-
-        if (HasUnlimitedReserve(weaponData))
-            RefillReserveAmmo(activeWeapon, weaponData);
-
-        if (weaponData.ReloadAfterShoot == true)
+        try
         {
-            if (activeWeapon.As<CCSWeaponBase>().VData is not { } weaponVData)
+            if (@event.Userid is not { } player || player.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value is not { } activeWeapon)
                 return HookResult.Continue;
 
-            player!.ExecuteClientCommand("slot3");
+            if (!TryGetWeaponData(GetDesignerName(activeWeapon.DesignerName), out WeaponData weaponData))
+                return HookResult.Continue;
 
-            Instance.AddTimer(0.1f, () =>
+            if (weaponData.UnlimitedClip == true)
+                activeWeapon.Clip1 += 1;
+
+            if (HasUnlimitedReserve(weaponData))
+                RefillReserveAmmo(activeWeapon, weaponData);
+
+            if (weaponData.ReloadAfterShoot == true)
             {
-                player.ExecuteClientCommand($"slot{(uint)weaponVData.GearSlot + 1}");
-            });
+                if (activeWeapon.As<CCSWeaponBase>().VData is not { } weaponVData)
+                    return HookResult.Continue;
+
+                player.ExecuteClientCommand("slot3");
+
+                AddTimer(0.1f, () =>
+                {
+                    try
+                    {
+                        if (player.PlayerPawn.Value is null)
+                            return;
+
+                        player.ExecuteClientCommand($"slot{(uint)weaponVData.GearSlot + 1}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogDebug(ex, "Ignoring reload-after-shoot command error.");
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unhandled exception in OnWeaponFire.");
         }
 
         return HookResult.Continue;
@@ -81,67 +87,217 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
     [ListenerHandler<OnEntitySpawned>]
     public void OnEntitySpawned(CEntityInstance entity)
     {
-        if (!entity.DesignerName.StartsWith("weapon_"))
-            return;
+        try
+        {
+            string? designerName = entity.DesignerName;
+            if (!entity.IsValid || string.IsNullOrWhiteSpace(designerName) || !designerName.StartsWith("weapon_", StringComparison.Ordinal))
+                return;
 
-        if (!Config.WeaponDatas.TryGetValue(GetDesignerName(entity.As<CBasePlayerWeapon>()), out WeaponData? weaponData))
-            return;
+            if (!TryGetWeaponData(GetDesignerName(designerName), out WeaponData weaponData))
+                return;
 
-        if (entity.As<CCSWeaponBase>().VData is not CCSWeaponBaseVData weaponVData)
-            return;
+            if (entity.As<CCSWeaponBase>().VData is not CCSWeaponBaseVData weaponVData)
+                return;
 
-        if (weaponData.Clip.HasValue)
-            weaponVData.MaxClip1 = weaponData.Clip.Value;
+            if (weaponData.Clip is int clip)
+                weaponVData.MaxClip1 = Math.Max(clip, 0);
 
-        if (ResolveReserveAmmo(weaponData, weaponVData) is int reserveAmmo)
-            weaponVData.PrimaryReserveAmmoMax = reserveAmmo;
+            if (ResolveReserveAmmo(weaponData, weaponVData) is int reserveAmmo)
+                weaponVData.PrimaryReserveAmmoMax = reserveAmmo;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unhandled exception in OnEntitySpawned.");
+        }
     }
 
-    public HookResult OnTakeDamage(DynamicHook hook)
+    [ListenerHandler<OnPlayerTakeDamagePre>]
+    public HookResult OnPlayerTakeDamagePre(CCSPlayerPawn playerPawn, CTakeDamageInfo info)
     {
-        if (hook.GetParam<CEntityInstance>(0).DesignerName is not "player")
+        try
         {
-            return HookResult.Continue;
+            if (!playerPawn.IsValid)
+                return HookResult.Continue;
+
+            CBaseEntity? weapon = info.Ability.Value;
+            if (weapon is null || !weapon.IsValid)
+                return HookResult.Continue;
+
+            string weaponName = GetDesignerName(weapon.DesignerName);
+            if (!weaponName.StartsWith("weapon_", StringComparison.Ordinal))
+                return HookResult.Continue;
+
+            if (!TryGetWeaponData(weaponName, out WeaponData weaponData))
+                return HookResult.Continue;
+
+            if (weaponData.OnlyHeadshot == true && info.GetHitGroup() != HitGroup_t.HITGROUP_HEAD)
+                return HookResult.Handled;
+
+            SetDamage(info, weaponData);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unhandled exception in OnPlayerTakeDamagePre.");
         }
 
-        CTakeDamageInfo info = hook.GetParam<CTakeDamageInfo>(1);
-        CBaseEntity? weapon = info.Ability.Value;
-
-        if (weapon == null)
-            return HookResult.Continue;
-
-        if (!Config.WeaponDatas.TryGetValue(GetDesignerName(weapon.As<CBasePlayerWeapon>()), out WeaponData? weaponData))
-            return HookResult.Continue;
-
-        if (weaponData.OnlyHeadshot == true && info.GetHitGroup() != HitGroup_t.HITGROUP_HEAD)
-            return HookResult.Handled;
-
-        SetDamage(info, weaponData);
         return HookResult.Continue;
     }
 
-    public HookResult OnWeaponCanAcquire(DynamicHook hook)
+    [ListenerHandler<OnTick>]
+    public void OnTick()
     {
-        CEconItemView econItem = hook.GetParam<CEconItemView>(1);
-        ushort defIndex = econItem.ItemDefinitionIndex;
+        try
+        {
+            _restrictionTickCounter++;
+            if (_restrictionTickCounter % 16 != 0)
+                return;
 
-        if (!WeaponIndexToName.TryGetValue(defIndex, out string? weaponName))
-            return HookResult.Continue;
+            foreach (CCSPlayerController player in Utilities.GetPlayers())
+                EnforcePlayerWeaponRestrictions(player);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unhandled exception in OnTick restriction enforcement.");
+        }
+    }
 
-        if (!Config.WeaponDatas.TryGetValue(weaponName, out WeaponData? weaponData))
-            return HookResult.Continue;
+    private bool TryGetWeaponData(string weaponName, out WeaponData weaponData)
+    {
+        weaponData = null!;
+        if (string.IsNullOrWhiteSpace(weaponName) || Config.WeaponDatas is null)
+            return false;
 
-        if (hook.GetParam<CCSPlayer_ItemServices>(0).Pawn.Value?.Controller.Value?.As<CCSPlayerController>() is not CCSPlayerController player)
-            return HookResult.Continue;
+        if (!Config.WeaponDatas.TryGetValue(weaponName, out WeaponData? configuredData) || configuredData is null)
+            return false;
 
-        if (!IsRestricted(player, weaponName, weaponData, hook.GetParam<AcquireMethod>(2)))
-            return HookResult.Continue;
+        weaponData = configuredData;
+        return true;
+    }
 
-        if (!player.IsBot)
-            Instance.Localizer.ForPlayer(player, "You cannot use this weapon", weaponName);
+    private void EnforcePlayerWeaponRestrictions(CCSPlayerController player)
+    {
+        try
+        {
+            if (!player.IsValid || !player.PlayerPawn.IsValid)
+                return;
 
-        hook.SetReturn(AcquireResult.NotAllowedByProhibition);
-        return HookResult.Handled;
+            if (player.PlayerPawn.Value?.As<CCSPlayerPawn>() is not CCSPlayerPawn pawn || !pawn.IsValid)
+                return;
+
+            if (pawn.WeaponServices is not CPlayer_WeaponServices weaponServices)
+                return;
+
+            List<(CBasePlayerWeapon Weapon, string WeaponName)> restrictedWeapons = [];
+            foreach (CHandle<CBasePlayerWeapon> weaponHandle in weaponServices.MyWeapons)
+            {
+                if (!weaponHandle.IsValid || weaponHandle.Value is not CBasePlayerWeapon weapon || !weapon.IsValid)
+                    continue;
+
+                string weaponName = GetDesignerName(weapon.DesignerName);
+                if (!TryGetWeaponData(weaponName, out WeaponData weaponData))
+                    continue;
+
+                if (!IsRestricted(player, weaponName, weaponData, AcquireMethod.PickUp))
+                    continue;
+
+                restrictedWeapons.Add((weapon, weaponName));
+            }
+
+            foreach ((CBasePlayerWeapon weapon, string weaponName) in restrictedWeapons)
+            {
+                try
+                {
+                    pawn.RemovePlayerItem(weapon);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogDebug(ex, "Failed to remove restricted weapon {WeaponName} from player {Player}.", weaponName, player.PlayerName);
+                    continue;
+                }
+
+                NotifyRestriction(player, weaponName);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to enforce restrictions for player {Player}.", player.PlayerName);
+        }
+    }
+
+    private void NotifyRestriction(CCSPlayerController player, string weaponName)
+    {
+        if (player.IsBot)
+            return;
+
+        string key = $"{player.SteamID}:{weaponName}";
+        DateTime now = DateTime.UtcNow;
+        if (_restrictionNoticeCooldown.TryGetValue(key, out DateTime lastNotice) && now - lastNotice < RestrictionNoticeInterval)
+            return;
+
+        _restrictionNoticeCooldown[key] = now;
+        try
+        {
+            Localizer.ForPlayer(player, "You cannot use this weapon", weaponName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to send restriction message for weapon {WeaponName} to player {Player}.", weaponName, player.PlayerName);
+        }
+    }
+
+    private static Config SanitizeConfig(Config? config)
+    {
+        Config sanitized = config ?? new Config();
+        sanitized.WeaponDatas ??= [];
+
+        Dictionary<string, WeaponData> normalizedWeaponData = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string configuredWeaponName, WeaponData configuredData) in sanitized.WeaponDatas)
+        {
+            WeaponData data = configuredData ?? new WeaponData();
+            string weaponName = string.IsNullOrWhiteSpace(configuredWeaponName) ? data.Weapon : configuredWeaponName;
+            if (string.IsNullOrWhiteSpace(weaponName))
+                continue;
+
+            string normalizedWeaponName = weaponName.Trim().ToLowerInvariant();
+            data.Weapon = normalizedWeaponName;
+            data.AdminFlagsToIgnoreBlockUsing = data.AdminFlagsToIgnoreBlockUsing?
+                .Where(static flag => !string.IsNullOrWhiteSpace(flag))
+                .Select(static flag => flag.Trim())
+                .ToList() ?? [];
+            data.WeaponQuota = data.WeaponQuota?
+                .Where(static kvp => kvp.Key >= 0 && kvp.Value >= 0)
+                .ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value) ?? [];
+            data.MapSpecificQuota = SanitizeMapSpecificQuota(data.MapSpecificQuota);
+
+            normalizedWeaponData[normalizedWeaponName] = data;
+        }
+
+        sanitized.WeaponDatas = normalizedWeaponData;
+        return sanitized;
+    }
+
+    private static Dictionary<string, Dictionary<int, int>> SanitizeMapSpecificQuota(Dictionary<string, Dictionary<int, int>>? mapSpecificQuota)
+    {
+        Dictionary<string, Dictionary<int, int>> normalized = new(StringComparer.OrdinalIgnoreCase);
+        if (mapSpecificQuota is null)
+            return normalized;
+
+        foreach ((string mapName, Dictionary<int, int> quota) in mapSpecificQuota)
+        {
+            if (string.IsNullOrWhiteSpace(mapName) || quota is null)
+                continue;
+
+            Dictionary<int, int> cleanQuota = quota
+                .Where(static kvp => kvp.Key >= 0 && kvp.Value >= 0)
+                .ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value);
+
+            if (cleanQuota.Count == 0)
+                continue;
+
+            normalized[mapName.Trim().ToLowerInvariant()] = cleanQuota;
+        }
+
+        return normalized;
     }
 
     private static void RefillReserveAmmo(CBasePlayerWeapon activeWeapon, WeaponData weaponData)
@@ -153,9 +309,24 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
         if (reserveTarget <= 0)
             reserveTarget = Math.Max(weaponVData.PrimaryReserveAmmoMax, 1);
 
-        int currentReserve = activeWeapon.ReserveAmmo[0];
-        if (currentReserve < reserveTarget)
-            activeWeapon.ReserveAmmo[0] = reserveTarget;
+        try
+        {
+            int currentReserve = activeWeapon.ReserveAmmo[0];
+            if (currentReserve < reserveTarget)
+                activeWeapon.ReserveAmmo[0] = reserveTarget;
+        }
+        catch
+        {
+            // Ignore invalid reserve ammo slots to avoid runtime crashes.
+        }
+    }
+
+    private static string GetDesignerName(string? designerName)
+    {
+        if (string.IsNullOrWhiteSpace(designerName))
+            return "weapon_unknown";
+
+        return designerName.Trim().ToLowerInvariant();
     }
 }
 
