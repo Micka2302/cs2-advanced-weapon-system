@@ -13,8 +13,14 @@ Discord link : [Discord server](https://discord.gg/4zQfUzjk36)
 2. Install the plugin files:
     * Place the contents of the downloaded zip file in the **`addons/counterstrikesharp`** folder.
 3. Configure the plugin settings:
-    * For the first installation: You will need to change the names of the files in the **`addons/counterstrikesharp/configs/plugins/cs2-advanced-weapon-system/`** folder. It should be called **`cs2-advanced-weapon-system.toml`**. In the tomlyn file you can set the weapon datas.
+    * Edit **`addons/counterstrikesharp/configs/plugins/cs2-advanced-weapon-system/config.json`**. The plugin creates this file automatically if it is missing.
 4. Restart or install the plugin:
     * Restart your server or reload the plugin for the settings to take effect.
     * Send the command **`css_plugins load cs2-advanced-weapon-system`** from the server ***(Load)***
     * Send the command **`css_plugins reload Advanced Weapon System`** from the server ***(Reload)***
+
+# Troubleshooting
+* `Config.EnableCanAcquireHook` enables the native CanAcquire pickup/buy restriction hook.
+* `Config.AutoUpdateSignatures` downloads `configs/plugins/cs2-advanced-weapon-system/gamedata.json` on startup from `Config.GameDataUpdateUrl`.
+* The plugin uses its own `gamedata.json` and does not fall back to CounterStrikeSharp gamedata for CanAcquire.
+* Use `Magazines` / `UnlimitedMagazines` for reserve magazines. `Ammo` / `UnlimitedAmmo` remain as legacy aliases and are converted when CS2 uses magazine-based reserve values.

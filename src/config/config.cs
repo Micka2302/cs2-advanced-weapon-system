@@ -1,9 +1,13 @@
-using CounterStrikeSharp.API.Core;
-
 namespace AdvancedWeaponSystem;
 
-public class Config : BasePluginConfig
+public class Config
 {
+    public bool AutoUpdateSignatures { get; set; } = true;
+
+    public string GameDataUpdateUrl { get; set; } = "https://raw.githubusercontent.com/Micka2302/cs2-advanced-weapon-system/main/gamedata.json";
+
+    public bool EnableCanAcquireHook { get; set; } = true;
+
     public Dictionary<string, WeaponData> WeaponDatas { get; set; } = [];
 
     public class WeaponData
@@ -21,10 +25,7 @@ public class Config : BasePluginConfig
         public bool? OnlyHeadshot { get; set; }
         public List<string> AdminFlagsToIgnoreBlockUsing { get; set; } = [];
         public Dictionary<int, int> WeaponQuota { get; set; } = [];
-
-        // 🔹 Novo polje za restrikcije po mapama
         public Dictionary<string, Dictionary<int, int>> MapSpecificQuota { get; set; } = [];
-
         public string? Damage { get; set; }
     }
 }

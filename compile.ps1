@@ -13,7 +13,6 @@ $configBuildOutput = Join-Path $buildOutputRoot "configs/plugins/$pluginName"
 $compiledRoot = Join-Path $root 'compiled'
 $pluginTarget = Join-Path $compiledRoot "plugins/$pluginName"
 $configTarget = Join-Path $compiledRoot "configs/plugins/$pluginName"
-$tomlynSource = Join-Path $root 'Tomlyn.dll'
 
 # Clean staging directory
 Remove-Item -Recurse -Force $compiledRoot -ErrorAction SilentlyContinue
@@ -35,11 +34,38 @@ if (-not (Test-Path $configBuildOutput)) {
 Copy-Item -Path (Join-Path $pluginBuildOutput '*') -Destination $pluginTarget -Recurse -Force
 Copy-Item -Path (Join-Path $configBuildOutput '*') -Destination $configTarget -Recurse -Force
 
-# Explicitly include Tomlyn.dll required by this plugin
-if (-not (Test-Path $tomlynSource)) {
-    throw "Tomlyn.dll not found at $tomlynSource"
+# Explicitly include Tomlyn.dll only when it is still present in the dependency graph.
+# The plugin now uses JSON configs directly, but CounterStrikeSharp may still reference Tomlyn.
+$depsPath = Join-Path $pluginBuildOutput "$pluginName.deps.json"
+if (-not (Test-Path $depsPath)) {
+    throw "Dependency manifest not found at $depsPath"
 }
-Copy-Item -Path $tomlynSource -Destination (Join-Path $pluginTarget 'Tomlyn.dll') -Force
+
+$depsJson = Get-Content -Raw $depsPath | ConvertFrom-Json
+$tomlynLibraryName = $depsJson.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Tomlyn/*' } | Select-Object -First 1
+if ($tomlynLibraryName) {
+    $tomlynVersion = ($tomlynLibraryName -split '/', 2)[1]
+    $nugetLocalsLine = (& dotnet nuget locals global-packages --list | Select-Object -First 1)
+    if (-not $nugetLocalsLine) {
+        throw "Unable to resolve NuGet global-packages path."
+    }
+
+    $globalPackagesPath = ($nugetLocalsLine -split ':\s*', 2)[1].Trim()
+    if ([string]::IsNullOrWhiteSpace($globalPackagesPath)) {
+        throw "NuGet global-packages path is empty."
+    }
+
+    $tomlynSourceCandidates = @(
+        (Join-Path $globalPackagesPath "tomlyn/$tomlynVersion/lib/net8.0/Tomlyn.dll"),
+        (Join-Path $globalPackagesPath "tomlyn/$tomlynVersion/lib/netstandard2.0/Tomlyn.dll")
+    )
+    $tomlynSource = $tomlynSourceCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $tomlynSource) {
+        throw "Tomlyn.dll v$tomlynVersion not found in NuGet global-packages."
+    }
+
+    Copy-Item -Path $tomlynSource -Destination (Join-Path $pluginTarget 'Tomlyn.dll') -Force
+}
 
 # Keep only linux and Windows runtimes to mirror release packaging
 $runtimeDir = Join-Path $pluginTarget 'runtimes'

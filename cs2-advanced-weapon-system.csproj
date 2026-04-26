@@ -18,8 +18,12 @@
 
 	<Target Name="CopyConfigFiles" AfterTargets="Build">
 		<ItemGroup>
-			<FilesToCopy Include="$(ProjectDir)cs2-advanced-weapon-system-example.toml" />
+			<FilesToCopy Include="$(ProjectDir)config.json" />
+			<FilesToCopy Include="$(ProjectDir)gamedata.json" />
 		</ItemGroup>
+		<Delete Files="$(ProjectDir)BuildOutput\plugins\cs2-advanced-weapon-system\gamedata.json" />
+		<RemoveDir Directories="$(ProjectDir)BuildOutput\configs\plugins\cs2-advanced-weapon-system\" />
+		<MakeDir Directories="$(ProjectDir)BuildOutput\configs\plugins\cs2-advanced-weapon-system\" />
 		<Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(ProjectDir)BuildOutput\configs\plugins\cs2-advanced-weapon-system\" />
 	</Target>
 </Project>

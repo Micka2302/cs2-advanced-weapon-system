@@ -1,0 +1,53 @@
+{
+  "Config": {
+    "AutoUpdateSignatures": true,
+    "GameDataUpdateUrl": "https://raw.githubusercontent.com/Micka2302/cs2-advanced-weapon-system/main/gamedata.json",
+    "EnableCanAcquireHook": true
+  },
+  "Weapons": {
+    "weapon_glock": {
+      "Clip": 30,
+      "UnlimitedClip": true,
+      "Damage": "1000",
+      "ReloadAfterShoot": true
+    },
+    "weapon_deagle": {
+      "Clip": 1,
+      "Magazines": 1,
+      "UnlimitedMagazines": true,
+      "OnlyHeadshot": true,
+      "Damage": "*2"
+    },
+    "weapon_awp": {
+      "WeaponQuota": {
+        "4": 1,
+        "8": 2,
+        "16": 3,
+        "32": 4
+      },
+      "AdminFlagsToIgnoreBlockUsing": [
+        "@css/root"
+      ]
+    },
+    "weapon_ssg08": {
+      "BlockUsing": true,
+      "AdminFlagsToIgnoreBlockUsing": [
+        "@css/ban",
+        "@css/unban"
+      ],
+      "Damage": "/2"
+    },
+    "weapon_aug": {
+      "BlockUsing": true
+    },
+    "weapon_ak47": {
+      "WeaponQuota": {
+        "0": 1,
+        "5": 2,
+        "10": 3,
+        "16": 4,
+        "32": 5
+      }
+    }
+  }
+}

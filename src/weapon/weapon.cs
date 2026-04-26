@@ -4,28 +4,20 @@ using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Entities.Constants;
 using CounterStrikeSharp.API.Modules.Utils;
-using System.Globalization;
 using static AdvancedWeaponSystem.Config;
 
 namespace AdvancedWeaponSystem;
 
 public static class Weapon
 {
-    public static bool TryGetDefIndex(string weaponName, out ushort defIndex)
+    public static ushort DefIndex(string weaponName)
     {
-        return weaponsList.TryGetValue(weaponName, out defIndex);
+        return weaponsList[weaponName];
     }
 
     public static string GetDesignerName(CBasePlayerWeapon weapon)
     {
-        try
-        {
-            return weapon.GetVData<CCSWeaponBaseVData>()?.Name ?? "weapon_unknown";
-        }
-        catch
-        {
-            return "weapon_unknown";
-        }
+        return weapon.GetVData<CCSWeaponBaseVData>()?.Name ?? "weapon_unknown";
     }
 
     public static bool HasUnlimitedReserve(WeaponData weaponData)
@@ -74,46 +66,28 @@ public static class Weapon
 
     public static void SetDamage(CTakeDamageInfo info, WeaponData weaponData)
     {
-        if (string.IsNullOrWhiteSpace(weaponData.Damage))
+        if (weaponData.Damage == null)
             return;
 
-        string damageValue = weaponData.Damage.Trim();
         float oldDamage = info.Damage;
+        char operation = weaponData.Damage[0];
 
-        if (float.TryParse(damageValue, NumberStyles.Float, CultureInfo.InvariantCulture, out float directValue))
+        if (int.TryParse(weaponData.Damage[1..], out int value))
         {
-            info.Damage = Math.Max(0f, directValue);
-            return;
+            info.Damage = operation switch
+            {
+                '+' => oldDamage + value,
+                '-' => oldDamage - value,
+                '*' => oldDamage * value,
+                '/' => value != 0 ? oldDamage / value : oldDamage,
+                _ => int.TryParse(weaponData.Damage, out value) ? value : oldDamage
+            };
         }
-
-        if (damageValue.Length < 2)
-            return;
-
-        char operation = damageValue[0];
-        if (!float.TryParse(damageValue[1..], NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
-            return;
-
-        float newDamage = operation switch
-        {
-            '+' => oldDamage + value,
-            '-' => oldDamage - value,
-            '*' => oldDamage * value,
-            '/' => value != 0 ? oldDamage / value : oldDamage,
-            _ => oldDamage
-        };
-
-        if (!float.IsFinite(newDamage))
-            return;
-
-        info.Damage = Math.Max(0f, newDamage);
     }
 
     public static bool IsRestricted(CCSPlayerController player, string weaponName, WeaponData weaponData, AcquireMethod acquireMethod)
     {
-        string[] flags = weaponData.AdminFlagsToIgnoreBlockUsing?
-            .Where(static flag => !string.IsNullOrWhiteSpace(flag))
-            .Select(static flag => flag.Trim())
-            .ToArray() ?? [];
+        string[] flags = [.. weaponData.AdminFlagsToIgnoreBlockUsing];
 
         if (flags.Length > 0 && !player.IsBot && AdminManager.PlayerHasPermissions(new SteamID(player.SteamID), flags))
             return false;
@@ -121,20 +95,16 @@ public static class Weapon
         if (weaponData.BlockUsing == true && (weaponData.IgnorePickUpFromBlockUsing != false || acquireMethod != AcquireMethod.PickUp))
             return true;
 
-        if ((weaponData.WeaponQuota?.Count ?? 0) > 0 || (weaponData.MapSpecificQuota?.Count ?? 0) > 0)
+        if (weaponData.WeaponQuota.Count > 0 || weaponData.MapSpecificQuota.Count > 0)
         {
-            if (!TryGetDefIndex(weaponName, out ushort defIndex))
-                return false;
-
+            ushort defIndex = DefIndex(weaponName);
             List<CCSPlayerController> players = [.. Utilities.GetPlayers().Where(p => p.Team == player.Team)];
             int playerCount = players.Count;
 
-            string currentMap = (Server.MapName ?? string.Empty).ToLowerInvariant();
+            string currentMap = Server.MapName.ToLowerInvariant();
 
-            // 🔹 Ako postoji MapSpecificQuota za ovu mapu, koristi ga
-            if (weaponData.MapSpecificQuota is { Count: > 0 } mapSpecificQuota &&
-                mapSpecificQuota.TryGetValue(currentMap, out Dictionary<int, int>? mapQuota) &&
-                mapQuota is { Count: > 0 })
+            // Use map-specific quota first when it exists for the current map.
+            if (weaponData.MapSpecificQuota.TryGetValue(currentMap, out Dictionary<int, int>? mapQuota) && mapQuota.Count > 0)
             {
                 int maxWeapons = mapQuota
                     .Where(kvp => playerCount >= kvp.Key)
@@ -142,20 +112,23 @@ public static class Weapon
                     .DefaultIfEmpty(0)
                     .Max();
 
-                int weaponsCount = players.Sum(p => p.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(w => Count(defIndex, w, p)) ?? 0);
+                int weaponsCount = Utilities.GetPlayers()
+                    .Where(p => p.Team == player.Team)
+                    .Sum(p => p.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(w => Count(defIndex, w, player)) ?? 0);
 
                 return weaponsCount >= maxWeapons;
             }
 
-            // Inače koristi globalni WeaponQuota
-            Dictionary<int, int> globalQuota = weaponData.WeaponQuota ?? [];
-            int maxGlobal = globalQuota
+            // Otherwise fall back to the global weapon quota.
+            int maxGlobal = weaponData.WeaponQuota
                 .Where(kvp => playerCount >= kvp.Key)
                 .Select(kvp => kvp.Value)
                 .DefaultIfEmpty(0)
                 .Max();
 
-            int globalCount = players.Sum(p => p.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(w => Count(defIndex, w, p)) ?? 0);
+            int globalCount = Utilities.GetPlayers()
+                .Where(p => p.Team == player.Team)
+                .Sum(p => p.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(w => Count(defIndex, w, player)) ?? 0);
 
             return globalCount >= maxGlobal;
         }
@@ -183,24 +156,24 @@ public static class Weapon
         {
             case (ushort)ItemDefinition.FRAG_GRENADE:
             case (ushort)ItemDefinition.HIGH_EXPLOSIVE_GRENADE:
-                total += ReadAmmoSlot(weaponServices, HE_SLOT);
+                total += Math.Max((int)weaponServices.Ammo[HE_SLOT], 1);
                 break;
 
             case (ushort)ItemDefinition.FLASHBANG:
-                total += ReadAmmoSlot(weaponServices, FLASH_SLOT);
+                total += Math.Max((int)weaponServices.Ammo[FLASH_SLOT], 1);
                 break;
 
             case (ushort)ItemDefinition.SMOKE_GRENADE:
-                total += ReadAmmoSlot(weaponServices, SMOKE_SLOT);
+                total += Math.Max((int)weaponServices.Ammo[SMOKE_SLOT], 1);
                 break;
 
             case (ushort)ItemDefinition.MOLOTOV:
             case (ushort)ItemDefinition.INCENDIARY_GRENADE:
-                total += ReadAmmoSlot(weaponServices, MOLOTOV_SLOT);
+                total += Math.Max((int)weaponServices.Ammo[MOLOTOV_SLOT], 1);
                 break;
 
             case (ushort)ItemDefinition.DECOY_GRENADE:
-                total += ReadAmmoSlot(weaponServices, DECOY_SLOT);
+                total += Math.Max((int)weaponServices.Ammo[DECOY_SLOT], 1);
                 break;
 
             default:
@@ -209,21 +182,6 @@ public static class Weapon
         }
 
         return total;
-    }
-
-    private static int ReadAmmoSlot(CPlayer_WeaponServices weaponServices, int slot)
-    {
-        try
-        {
-            if (slot < 0)
-                return 1;
-
-            return Math.Max((int)weaponServices.Ammo[slot], 1);
-        }
-        catch
-        {
-            return 1;
-        }
     }
 
     private static readonly Dictionary<string, ushort> weaponsList = new()
